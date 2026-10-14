@@ -24,15 +24,17 @@ signif_fmt <- function(x) {
 # concentration of one stressor in the units the user thinks in
 display_conc <- function(id, base_value, s) {
   r <- s[s$id == id, ]
+  f <- function(u) paste(signif_fmt(from_base(base_value, u, id, r)), unit_label(u, id))
   if (r$kind == "dose") {
-    sprintf("%s × WC (%s mL/L)", formatC(base_value / r$wc_baseline, format = "f", digits = 2),
-            formatC(base_value, format = "f", digits = 2))
+    paste(f("xWC"), f("mgEl/L"), f("mg/L"), sep = " \u00b7 ")
+  } else if (id == "NaCl") {
+    paste(f("mgEl/L"), f("mg/L"), sep = " \u00b7 ")
   } else {
-    v <- from_base(base_value * r$target_factor, r$target_unit)
-    sp <- if (id == "NaCl") " Cl⁻" else ""
-    paste0(signif_fmt(v), " ", r$target_unit, sp)
+    f(r$target_unit)
   }
 }
+
+unit_choices <- function(units, id) setNames(units, vapply(units, unit_label, "", id = id))
 
 issue_text <- function(iss, lang, short = FALSE) {
   pre <- if (short) "is_" else "i_"
@@ -71,20 +73,23 @@ stock_row <- function(i) {
   r <- defaults[i, ]
   id <- r$id
   is_dose <- r$kind == "dose"
-  mass_units <- names(MASS_UNITS)
   tags$tr(
     tags$td(tags$strong(i18n(paste0("st_", id)))),
-    tags$td(if (is_dose) numericInput(paste0("wc_", id), NULL, r$wc_baseline, min = 0, step = 0.1, width = "90px") else "—"),
+    tags$td(if (is_dose) div(class = "d-flex gap-1 align-items-center",
+      numericInput(paste0("wc_", id), NULL, r$wc_dose, min = 0, step = 0.1, width = "70px"),
+      span(class = "small", i18n("wc_of")),
+      numericInput(paste0("wcs_", id), NULL, r$wc_stock_gL, min = 0, width = "90px"),
+      span(class = "small", i18n("wc_stock_txt"))
+    ) else "\u2014"),
     tags$td(div(class = "d-flex gap-1 align-items-center",
-      numericInput(paste0("stock_", id), NULL, r$stock_value, min = 0, width = "110px"),
-      if (is_dose) span("mL/L") else selectInput(paste0("sunit_", id), NULL, mass_units, r$stock_unit, width = "95px")
+      numericInput(paste0("stock_", id), NULL, r$stock_value, min = 0, width = "100px"),
+      selectInput(paste0("sunit_", id), NULL, unit_choices(STOCK_UNITS[[id]], id), r$stock_unit, width = "150px")
     )),
-    tags$td(selectInput(paste0("solv_", id), NULL, c("WC medium" = "WC", "MilliQ water" = "water"), r$stock_solvent, width = "150px")),
+    tags$td(selectInput(paste0("solv_", id), NULL, c("WC medium" = "WC", "MilliQ water" = "water"), r$stock_solvent, width = "140px")),
     tags$td(div(class = "d-flex gap-1 align-items-center",
       numericInput(paste0("target_", id), NULL, r$target_value, min = 0, width = "100px"),
-      if (is_dose) i18n("doses_total") else tagList(
-        selectInput(paste0("tunit_", id), NULL, mass_units, r$target_unit, width = "95px"),
-        if (id == "NaCl") i18n("cl_added") else i18n("added"))
+      selectInput(paste0("tunit_", id), NULL, unit_choices(TARGET_UNITS[[id]], id), r$target_unit, width = "150px"),
+      span(class = "small", i18n(if (is_dose) "total_in_well" else "added"))
     ))
   )
 }
@@ -131,6 +136,7 @@ ui <- page_navbar(
           tags$tbody(lapply(seq_len(nrow(defaults)), stock_row))
         )
       ),
+      p(class = "small text-muted", i18n("np_note")),
       div(class = "d-flex gap-2 flex-wrap",
         downloadButton("save_settings", i18n("save_settings"), class = "btn-sm btn-outline-secondary"),
         div(style = "max-width: 260px;", fileInput("load_settings", NULL, accept = ".csv", buttonLabel = i18n("load_settings"))),
@@ -231,16 +237,37 @@ server <- function(input, output, session) {
     s <- defaults
     for (k in seq_len(nrow(s))) {
       id <- s$id[k]
-      if (s$kind[k] == "dose") s$wc_baseline[k] <- input[[paste0("wc_", id)]] %||% s$wc_baseline[k]
+      if (s$kind[k] == "dose") {
+        s$wc_dose[k]     <- input[[paste0("wc_", id)]] %||% s$wc_dose[k]
+        s$wc_stock_gL[k] <- input[[paste0("wcs_", id)]] %||% s$wc_stock_gL[k]
+      }
       s$stock_value[k]   <- input[[paste0("stock_", id)]] %||% s$stock_value[k]
       s$stock_solvent[k] <- input[[paste0("solv_", id)]] %||% s$stock_solvent[k]
       s$target_value[k]  <- input[[paste0("target_", id)]] %||% s$target_value[k]
-      if (s$kind[k] == "mass") {
-        s$stock_unit[k]  <- input[[paste0("sunit_", id)]] %||% s$stock_unit[k]
-        s$target_unit[k] <- input[[paste0("tunit_", id)]] %||% s$target_unit[k]
-      }
+      s$stock_unit[k]  <- input[[paste0("sunit_", id)]] %||% s$stock_unit[k]
+      s$target_unit[k] <- input[[paste0("tunit_", id)]] %||% s$target_unit[k]
     }
     s
+  })
+
+  # When a unit is changed, convert the number so the concentration stays the same.
+  prev_unit <- new.env()
+  for (id0 in CHEM_IDS) for (side0 in c("sunit", "tunit")) local({
+    id <- id0; side <- side0
+    uid <- paste0(side, "_", id)
+    vid <- paste0(if (side == "sunit") "stock_" else "target_", id)
+    assign(uid, defaults[[if (side == "sunit") "stock_unit" else "target_unit"]][defaults$id == id], envir = prev_unit)
+    observeEvent(input[[uid]], {
+      new <- input[[uid]]
+      old <- get(uid, envir = prev_unit)
+      assign(uid, new, envir = prev_unit)
+      v <- isolate(input[[vid]])
+      if (!identical(old, new) && is.numeric(v) && !is.na(v)) {
+        r <- isolate(settings())
+        r <- r[r$id == id, ]
+        updateNumericInput(session, vid, value = signif(from_base(to_base(v, old, id, r), new, id, r), 6))
+      }
+    }, ignoreInit = TRUE)
   })
 
   min_pip <- reactive(input$min_pip %||% 2)
@@ -249,8 +276,7 @@ server <- function(input, output, session) {
   # -- save / load / reset settings
   output$save_settings <- downloadHandler(
     filename = function() paste0("medium-settings-", Sys.Date(), ".csv"),
-    content = function(file) utils::write.csv(settings()[, c("id", "wc_baseline", "stock_value", "stock_unit",
-      "stock_solvent", "target_value", "target_unit")], file, row.names = FALSE, fileEncoding = "UTF-8")
+    content = function(file) utils::write.csv(settings()[, c("id", "wc_dose", "wc_stock_gL", "stock_value", "stock_unit", "stock_solvent", "target_value", "target_unit")], file, row.names = FALSE, fileEncoding = "UTF-8")
   )
 
   apply_settings <- function(s) {
@@ -258,14 +284,18 @@ server <- function(input, output, session) {
       id <- s$id[k]
       if (!id %in% CHEM_IDS) next
       kind <- defaults$kind[defaults$id == id]
-      if (kind == "dose") updateNumericInput(session, paste0("wc_", id), value = s$wc_baseline[k])
+      if (kind == "dose") {
+        updateNumericInput(session, paste0("wc_", id), value = s$wc_dose[k])
+        updateNumericInput(session, paste0("wcs_", id), value = s$wc_stock_gL[k])
+      }
+      # the unit observers must not convert loaded values
+      assign(paste0("sunit_", id), s$stock_unit[k], envir = prev_unit)
+      assign(paste0("tunit_", id), s$target_unit[k], envir = prev_unit)
       updateNumericInput(session, paste0("stock_", id), value = s$stock_value[k])
+      updateSelectInput(session, paste0("sunit_", id), selected = s$stock_unit[k])
       updateSelectInput(session, paste0("solv_", id), selected = s$stock_solvent[k])
       updateNumericInput(session, paste0("target_", id), value = s$target_value[k])
-      if (kind == "mass") {
-        updateSelectInput(session, paste0("sunit_", id), selected = s$stock_unit[k])
-        updateSelectInput(session, paste0("tunit_", id), selected = s$target_unit[k])
-      }
+      updateSelectInput(session, paste0("tunit_", id), selected = s$target_unit[k])
     }
   }
 
@@ -276,7 +306,7 @@ server <- function(input, output, session) {
       showNotification("Could not read this settings file.", type = "error")
       return()
     }
-    apply_settings(s)
+    apply_settings(upgrade_settings(s))
   })
 
   observeEvent(input$reset, apply_settings(defaults))
@@ -287,11 +317,11 @@ server <- function(input, output, session) {
     mf <- (input$max_frac %||% 2) / 100
     d <- stock_diagnostics(s, mf)
     target_txt <- vapply(seq_len(nrow(d)), function(k) display_conc(d$id[k], d$target_base[k], s), "")
-    stock_txt <- paste(signif_fmt(s$stock_value), s$stock_unit)
+    stock_txt <- paste(signif_fmt(s$stock_value), mapply(unit_label, s$stock_unit, s$id))
     verdict <- ifelse(is.na(d$fraction_alone), tr("v_weak", L),
                 ifelse(d$fraction_alone > mf * 1.0001, tr("v_high", L), tr("v_ok", L)))
     out <- data.frame(st_name(d$id, L), target_txt, stock_txt, pct(d$fraction_alone, 2),
-                      paste(signif_fmt(d$suggested_stock), d$stock_unit), verdict,
+                      paste(signif_fmt(d$suggested_stock), mapply(unit_label, d$stock_unit, d$id)), verdict,
                       stringsAsFactors = FALSE)
     names(out) <- c(tr("h_stressor", L), tr("c_target", L), tr("c_stock", L), tr("c_frac", L),
                     tr("c_suggest", L), tr("c_verdict", L))
@@ -407,8 +437,7 @@ server <- function(input, output, session) {
       treat <- data.frame(d$treatment, d$n_stressors, stressor_text(d$stressors, L), d$medium, stringsAsFactors = FALSE)
       names(treat) <- c(tr("c_treatment", L), tr("c_n", L), tr("c_stressors", L), tr("c_medium", L))
       sheets <- list(recipes = recipe_table(p, L, s, formatted = FALSE), treatments = treat,
-                     settings = s[, c("id", "wc_baseline", "stock_value", "stock_unit", "stock_solvent",
-                                      "target_value", "target_unit")])
+                     settings = s[, c("id", "wc_dose", "wc_stock_gL", "stock_value", "stock_unit", "stock_solvent", "target_value", "target_unit")])
       names(sheets) <- c(tr("h_recipes", L), tr("h_treatments", L), tr("tab_stocks", L))
       names(sheets) <- substr(gsub("[^[:alnum:] &-]", "", names(sheets)), 1, 31)
       if (requireNamespace("writexl", quietly = TRUE)) {

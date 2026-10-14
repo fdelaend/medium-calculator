@@ -22,17 +22,21 @@ TXT <- list(
 
   # stocks tab
   stocks_intro = c(
-    en = "Enter the intermediate solutions you have and the concentration you want in the wells. N and P are expressed in mL of the WC stock solution per litre (normal WC = 1 dose). The salt target is the Cl⁻ added on top of the medium.",
-    fr = "Indiquez vos solutions intermédiaires et la concentration voulue dans les puits. N et P sont exprimés en mL de solution mère WC par litre (WC normal = 1 dose). La cible pour le sel est la quantité de Cl⁻ ajoutée au milieu."),
+    en = "Enter the intermediate solutions you have and the concentration you want in the wells. Every concentration can be entered in the unit you prefer; changing a unit converts the number.",
+    fr = "Indiquez vos solutions interm\u00e9diaires et la concentration voulue dans les puits. Chaque concentration peut \u00eatre saisie dans l'unit\u00e9 de votre choix ; changer d'unit\u00e9 convertit la valeur."),
   h_stressor    = c(en = "Stressor", fr = "Stresseur"),
-  h_wc_dose     = c(en = "Dose in normal WC (mL/L)", fr = "Dose dans le WC normal (mL/L)"),
+  h_wc_dose     = c(en = "Normal WC medium contains", fr = "Le milieu WC normal contient"),
+  wc_of         = c(en = "mL/L of a", fr = "mL/L d'une solution \u00e0"),
+  wc_stock_txt  = c(en = "g/L stock", fr = "g/L"),
+  total_in_well = c(en = "total (WC included)", fr = "au total (WC compris)"),
+  np_note       = c(
+    en = "N and P: the target is the total concentration in the well, including what normal WC already contains. \u00d7 WC = multiple of normal WC (4 \u00d7 WC = normal WC plus 3 extra doses). mL stock/L = mL of the WC stock solution per litre. The stock concentrations (85.01 g/L NaNO\u2083 and 8.71 g/L K\u2082HPO\u2084, standard WC) only matter when \u00d7 WC or mL stock/L is mixed with mass or molar units; check them against your recipe. Salt, glyphosate and tylosin: the target is the amount added.",
+    fr = "N et P : la cible est la concentration totale dans le puits, y compris ce que contient d\u00e9j\u00e0 le WC normal. \u00d7 WC = multiple du WC normal (4 \u00d7 WC = WC normal plus 3 doses). mL stock/L = mL de solution m\u00e8re WC par litre. Les concentrations des solutions m\u00e8res (85,01 g/L NaNO\u2083 et 8,71 g/L K\u2082HPO\u2084, WC standard) n'interviennent que si l'on combine \u00d7 WC ou mL stock/L avec des unit\u00e9s de masse ou molaires ; v\u00e9rifiez-les avec votre recette. Sel, glyphosate et tylosine : la cible est la quantit\u00e9 ajout\u00e9e."),
   h_stock       = c(en = "Intermediate solution", fr = "Solution intermédiaire"),
   h_solvent     = c(en = "Prepared in", fr = "Préparée dans"),
   h_target      = c(en = "Target in wells", fr = "Cible dans les puits"),
   solv_WC       = c(en = "WC medium", fr = "Milieu WC"),
   solv_water    = c(en = "MilliQ water", fr = "Eau milliQ"),
-  doses_total   = c(en = "doses in total", fr = "doses au total"),
-  cl_added      = c(en = "Cl⁻ added", fr = "Cl⁻ ajouté"),
   added         = c(en = "added", fr = "ajouté"),
   h_checks      = c(en = "Check of the intermediate solutions", fr = "Vérification des solutions intermédiaires"),
   checks_intro  = c(

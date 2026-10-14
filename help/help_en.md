@@ -2,8 +2,16 @@
 
 **Tab 1 – Stocks & targets.** Enter the concentration of each intermediate solution, whether it was made in WC medium or in milliQ water, and the target in the wells.
 
-- **N and P** are counted in *mL of the WC stock solution per litre*. Normal WC contains 1 mL/L NaNO₃ stock and 1.5 mL/L K₂HPO₄ stock. A target of "4 doses in total" means 4 × the normal amount, so 3 doses on top of the medium.
-- **Salt**: the target is the **Cl⁻ added** (on top of the medium). The calculator converts it to NaCl using 35.45/58.44 = 0.607 g Cl⁻ per g NaCl, so 300 mg/L Cl⁻ = 494.5 mg/L NaCl.
+- **N and P**: the target is the **total** concentration in the well, including what normal WC already contains. Pick the unit you prefer:
+  - **× WC**: a multiple of normal WC. 4 × WC = normal WC plus 3 extra doses.
+  - **mg N/L** or **mg P/L**: mass of the element.
+  - **mg/L NaNO₃** or **mg/L K₂HPO₄**: mass of the salt.
+  - **µM** or **mM**: molar concentration.
+
+  Changing the unit converts the number. With standard WC, 4 × WC = 56.0 mg N/L = 340 mg/L NaNO₃ for N, and 9.29 mg P/L = 52.3 mg/L K₂HPO₄ for P.
+- The column *Normal WC medium contains* gives the WC recipe: 1 mL/L of a NaNO₃ stock and 1.5 mL/L of a K₂HPO₄ stock, with the concentration of those stocks. The defaults (85.01 g/L NaNO₃, 8.71 g/L K₂HPO₄) are standard WC; check them against your own recipe. They only matter when × WC or *mL stock/L* is combined with mass or molar units.
+- Intermediate solutions for N and P can be given in *mL stock/L*: for example, WC medium made with 10 mL/L NaNO₃ stock instead of 1 mL/L. They can also be given in mass or molar units.
+- **Salt**: the target is the amount **added** on top of the medium, in mg Cl⁻/L or in mg/L NaCl (0.607 g Cl⁻ per g NaCl, so 300 mg Cl⁻/L = 494.5 mg/L NaCl).
 - **Glyphosate and tylosin**: the target is the amount added. Stock and target must be expressed in the same form (here, isopropylamine salt and tartrate).
 
 The check table shows how much of the final volume each intermediate solution takes on its own. **In a mixture these shares add up**, so they must stay small (a few % each). The last column gives the stock concentration you would need to reach the aim you set.
@@ -18,7 +26,7 @@ Every solution (plain WC and each intermediate solution) has a known concentrati
 
 C_i (well) = Σ_j f_j · c_ij + f_WC · b_i,   with f_WC = 1 − Σ_j f_j
 
-Here b_i is the normal WC level (1 or 1.5 mL/L for N and P, 0 for the others). For the stressors in the mixture, C_i is set equal to the target and the small linear system is solved for the f_j. Volume of solution j = f_j × volume to prepare.
+Here b_i is the normal WC level (for N and P: WC dose × stock concentration; 0 for the others). For the stressors in the mixture, C_i is set equal to the target and the small linear system is solved for the f_j. Volume of solution j = f_j × volume to prepare.
 
 - **Intermediate made in WC medium**: it carries the normal WC nutrients, so it doesn't dilute the medium. For example, the N solution at 10 mL/L contains 10 doses of N, of which 1 is the WC dose.
 - **Intermediate made in water**: it dilutes all WC ingredients. If N or P is a stressor in the same mixture, the calculation compensates for that dilution. For the other WC ingredients (trace elements, vitamins…), the app reports the remaining WC strength.

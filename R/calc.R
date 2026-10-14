@@ -22,54 +22,127 @@
 # the WC nutrients, which the system compensates for when N or P is part of
 # the mixture).
 
-CL_FRACTION_NACL <- 35.453 / (22.990 + 35.453) # mass fraction of Cl- in NaCl
-
 CHEM_IDS <- c("N", "P", "NaCl", "Gly", "Tyl")
 PHYS_IDS <- c("Temp", "Shade", "Harvest")
 ALL_IDS <- c(CHEM_IDS, PHYS_IDS)
 
-# conversion of mass-concentration units to mg/L
-MASS_UNITS <- c("ng/L" = 1e-6, "µg/L" = 1e-3, "mg/L" = 1, "g/L" = 1e3)
+# Molar masses (g/mol) and the element / ion the concentration can be
+# expressed as. Glyphosate and tylosin are only handled as mass of the salt.
+COMPOUNDS <- data.frame(
+  id       = CHEM_IDS,
+  formula  = c("NaNO₃", "K₂HPO₄", "NaCl", "", ""),
+  mw       = c(84.995, 174.176, 58.443, NA, NA),
+  el       = c("N", "P", "Cl⁻", NA, NA),
+  el_mass  = c(14.007, 30.974, 35.453, NA, NA),
+  stringsAsFactors = FALSE
+)
+
+CL_FRACTION_NACL <- 35.453 / 58.443 # mass fraction of Cl- in NaCl
+
+# Units. The internal (base) unit of every compound is mg/L of the compound
+# itself (mg/L NaNO3, mg/L K2HPO4, mg/L NaCl, mg/L glyphosate salt, ...).
+#   ng/L ug/L mg/L g/L : mass of the compound per litre
+#   mgEl/L gEl/L        : mass of the element / ion (mg N/L, mg P/L, mg Cl-/L)
+#   uM mM               : molar concentration
+#   xWC                 : multiple of the amount in normal WC medium
+#   mLstock             : mL of the WC stock solution per litre
+TARGET_UNITS <- list(
+  N    = c("xWC", "mgEl/L", "mg/L", "uM", "mM"),
+  P    = c("xWC", "mgEl/L", "mg/L", "uM", "mM"),
+  NaCl = c("mgEl/L", "gEl/L", "mg/L", "g/L", "mM"),
+  Gly  = c("ng/L", "ug/L", "mg/L", "g/L"),
+  Tyl  = c("ng/L", "ug/L", "mg/L", "g/L")
+)
+STOCK_UNITS <- list(
+  N    = c("mLstock", "mg/L", "g/L", "mgEl/L", "mM"),
+  P    = c("mLstock", "mg/L", "g/L", "mgEl/L", "mM"),
+  NaCl = c("mg/L", "g/L", "mgEl/L", "gEl/L", "mM"),
+  Gly  = c("ng/L", "ug/L", "mg/L", "g/L"),
+  Tyl  = c("ng/L", "ug/L", "mg/L", "g/L")
+)
+
+unit_label <- function(unit, id) {
+  cmp <- COMPOUNDS[COMPOUNDS$id == id, ]
+  switch(unit,
+    "ug/L"    = "µg/L",
+    "mg/L"    = if (nzchar(cmp$formula)) paste("mg/L", cmp$formula) else "mg/L",
+    "g/L"     = if (nzchar(cmp$formula)) paste("g/L", cmp$formula) else "g/L",
+    "mgEl/L"  = paste0("mg ", cmp$el, "/L"),
+    "gEl/L"   = paste0("g ", cmp$el, "/L"),
+    "uM"      = "µM",
+    "xWC"     = "× WC",
+    "mLstock" = "mL stock/L",
+    unit)
+}
+
+# mg/L of compound corresponding to 1 `unit`, for one settings row `r`
+# (r needs wc_dose and wc_stock_gL for the WC-related units).
+unit_factor <- function(unit, id, r = NULL) {
+  cmp <- COMPOUNDS[COMPOUNDS$id == id, ]
+  switch(unit,
+    "ng/L"    = 1e-6,
+    "ug/L"    = 1e-3,
+    "mg/L"    = 1,
+    "g/L"     = 1e3,
+    "mgEl/L"  = cmp$mw / cmp$el_mass,
+    "gEl/L"   = 1e3 * cmp$mw / cmp$el_mass,
+    "uM"      = cmp$mw / 1e3,
+    "mM"      = cmp$mw,
+    "xWC"     = r$wc_dose * r$wc_stock_gL,   # mL/L x g/L = mg/L
+    "mLstock" = r$wc_stock_gL,
+    stop("Unknown unit: ", unit))
+}
+
+to_base <- function(value, unit, id, r = NULL) value * unit_factor(unit, id, r)
+from_base <- function(value, unit, id, r = NULL) value / unit_factor(unit, id, r)
 
 # Default settings: values given by Laura Willam (Oct 2026).
-#  kind "dose": compound is a WC ingredient, concentrations in mL of WC stock
-#               solution per L; target = number of doses in total (4 = 4x WC).
-#  kind "mass": concentrations as mass per volume; target = amount ADDED
-#               (expressed as the target species, e.g. Cl- for NaCl).
+#  N and P are WC ingredients ("dose"): normal WC contains wc_dose mL/L of a
+#  stock solution of wc_stock_gL g/L (standard WC: 85.01 g/L NaNO3 and
+#  8.71 g/L K2HPO4 -- to be checked against the lab recipe). Their target is
+#  the TOTAL concentration in the well, normal WC included.
+#  For the other stressors ("mass") the target is the amount ADDED.
 default_settings <- function() {
   data.frame(
     id            = CHEM_IDS,
     kind          = c("dose", "dose", "mass", "mass", "mass"),
-    wc_baseline   = c(1, 1.5, 0, 0, 0),
+    wc_dose       = c(1, 1.5, 0, 0, 0),
+    wc_stock_gL   = c(85.01, 8.71, 0, 0, 0),
     stock_value   = c(10, 10, 1000, 50, 0.5),
-    stock_unit    = c("mL/L", "mL/L", "mg/L", "mg/L", "g/L"),
+    stock_unit    = c("mLstock", "mLstock", "mg/L", "mg/L", "g/L"),
     stock_solvent = c("WC", "WC", "water", "water", "water"),
     target_value  = c(4, 4, 300, 300, 0.2),
-    target_unit   = c("x", "x", "mg/L", "µg/L", "mg/L"),
-    target_factor = c(1, 1, CL_FRACTION_NACL, 1, 1),
+    target_unit   = c("xWC", "xWC", "mgEl/L", "ug/L", "mg/L"),
     stringsAsFactors = FALSE
   )
 }
 
-# ---- unit handling -------------------------------------------------------
-
-to_base <- function(value, unit) {
-  ifelse(unit %in% names(MASS_UNITS), value * MASS_UNITS[unit], value)
+# Bring settings saved by an earlier version of the app to the current format.
+upgrade_settings <- function(s) {
+  d <- default_settings()
+  if (!"wc_dose" %in% names(s)) {
+    s$wc_dose <- if ("wc_baseline" %in% names(s)) s$wc_baseline else d$wc_dose[match(s$id, d$id)]
+    s$target_unit[s$id == "NaCl" & s$target_unit == "mg/L"] <- "mgEl/L" # was Cl-
+  }
+  if (!"wc_stock_gL" %in% names(s)) s$wc_stock_gL <- d$wc_stock_gL[match(s$id, d$id)]
+  fix <- c("x" = "xWC", "mL/L" = "mLstock", "µg/L" = "ug/L")
+  for (col in c("stock_unit", "target_unit")) {
+    hit <- s[[col]] %in% names(fix)
+    s[[col]][hit] <- fix[s[[col]][hit]]
+  }
+  s
 }
 
-from_base <- function(value, unit) {
-  ifelse(unit %in% names(MASS_UNITS), value / MASS_UNITS[unit], value)
-}
-
-# Derived quantities in base units (mL/L for dose, mg/L compound for mass).
+# Derived quantities in base units (mg/L of compound).
 prepare_settings <- function(s) {
-  s$baseline    <- ifelse(s$kind == "dose", s$wc_baseline, 0)
-  s$stock_base  <- unname(to_base(s$stock_value, s$stock_unit))
-  s$target_base <- ifelse(
-    s$kind == "dose",
-    s$target_value * s$wc_baseline,
-    s$baseline + unname(to_base(s$target_value, s$target_unit)) / s$target_factor
-  )
+  n <- nrow(s)
+  s$baseline <- ifelse(s$kind == "dose", s$wc_dose * s$wc_stock_gL, 0)
+  s$stock_base <- vapply(seq_len(n), function(k)
+    to_base(s$stock_value[k], s$stock_unit[k], s$id[k], s[k, ]), 0)
+  s$target_base <- vapply(seq_len(n), function(k)
+    to_base(s$target_value[k], s$target_unit[k], s$id[k], s[k, ]), 0)
+  # targets of non-WC compounds are amounts added on top of the medium
+  s$target_base <- ifelse(s$kind == "dose", s$target_base, s$baseline + s$target_base)
   s
 }
 
@@ -175,7 +248,8 @@ stock_diagnostics <- function(settings, max_fraction = 0.02) {
     target_base = p$target_base,
     stock_base = p$stock_base,
     fraction_alone = frac_alone,
-    suggested_stock = unname(from_base(suggested_base, p$stock_unit)),
+    suggested_stock = vapply(seq_len(nrow(p)), function(k)
+      from_base(suggested_base[k], p$stock_unit[k], p$id[k], p[k, ]), 0),
     stock_unit = p$stock_unit,
     stringsAsFactors = FALSE
   )

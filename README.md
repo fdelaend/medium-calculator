@@ -33,10 +33,11 @@ Then open `app.R` in RStudio and click **Run App**, or run `shiny::runApp("path/
 
 | Stressor | Intermediate solution | Target in wells |
 |---|---|---|
-| N (NaNO₃ stock; WC = 1 mL/L) | 10 mL/L, in WC | 4 doses in total |
-| P (K₂HPO₄ stock; WC = 1.5 mL/L) | 10 mL/L, in WC | 4 doses in total |
-| NaCl | 1000 mg/L, in water* | 300 mg/L Cl⁻ added |
+| N (WC = 1 mL/L of 85.01 g/L NaNO₃ stock**) | 10 mL stock/L, in WC | 4 × WC in total (= 56.0 mg N/L) |
+| P (WC = 1.5 mL/L of 8.71 g/L K₂HPO₄ stock**) | 10 mL stock/L, in WC | 4 × WC in total (= 9.29 mg P/L) |
+| NaCl | 1000 mg/L, in water* | 300 mg Cl⁻/L added |
 | Glyphosate (isopropylamine salt) | 50 mg/L, in water* | 300 µg/L |
 | Tylosin tartrate | 0.5 g/L, in water* | 0.2 mg/L |
 
 \* to be confirmed; this can be changed in tab 1.
+\*\* standard WC stock concentrations, to be checked against the lab recipe. All targets and stocks can be entered in other units (mg N/L, mg/L of the salt, µM, …).

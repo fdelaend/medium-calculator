@@ -17,8 +17,8 @@ test_that("single compounds match hand calculations (72 mL)", {
   #   f*10 + (1-f)*1 = 4 -> f = 1/3 -> 24 mL
   r <- solve_mixture(s, "N", 72)
   expect_equal(vol(r, "N"), 24000, tolerance = 1e-9)
-  expect_equal(unname(r$final["N"]), 4, tolerance = 1e-9)
-  expect_equal(unname(r$final["P"]), 1.5, tolerance = 1e-9)  # P untouched
+  expect_equal(unname(r$final["N"]), 4 * 85.01, tolerance = 1e-9)      # mg/L NaNO3
+  expect_equal(unname(r$final["P"]), 1.5 * 8.71, tolerance = 1e-9)    # P untouched
   # P: 4 doses (6 mL/L) from 10 mL/L, WC has 1.5 -> f = 4.5/8.5
   expect_equal(vol(solve_mixture(s, "P", 72), "P"), 72000 * 4.5 / 8.5, tolerance = 1e-9)
   # Cl-: 300 mg/L Cl- = 494.5 mg/L NaCl from 1000 mg/L NaCl
@@ -29,7 +29,7 @@ test_that("single compounds match hand calculations (72 mL)", {
 
 test_that("water-based stocks dilute WC and N is compensated", {
   r <- solve_mixture(s, c("N", "NaCl"), 72)
-  expect_equal(unname(r$final["N"]), 4, tolerance = 1e-9)
+  expect_equal(unname(r$final["N"]), 4 * 85.01, tolerance = 1e-9)
   f_nacl <- 300 / CL_FRACTION_NACL / 1000
   expect_equal(unname(r$fractions["N"]), (3 + f_nacl) / 9, tolerance = 1e-9)
   expect_equal(r$wc_strength, 1 - f_nacl, tolerance = 1e-9)
@@ -71,6 +71,40 @@ test_that("suggested stock gives the requested fraction", {
   s4 <- s; s4$stock_value <- d$suggested_stock
   for (id in CHEM_IDS)
     expect_equal(unname(solve_mixture(s4, id, 100)$fractions[id]), 0.02, tolerance = 1e-9)
+})
+
+test_that("N and P targets can be given as free concentrations", {
+  # standard WC: 1 mL/L of 85.01 g/L NaNO3 = 85.01 mg/L NaNO3 = 14.01 mg N/L
+  p <- prepare_settings(s)
+  expect_equal(p$baseline[p$id == "N"], 85.01, tolerance = 1e-9)
+  expect_equal(p$target_base[p$id == "N"], 4 * 85.01, tolerance = 1e-9)
+  # the same target written in mg N/L, mg/L NaNO3 and uM gives the same recipe
+  ref <- solve_mixture(s, c("N", "P"), 72)
+  n_mgN <- 4 * 85.01 * 14.007 / 84.995
+  for (u in list(c("mgEl/L", n_mgN), c("mg/L", 4 * 85.01), c("uM", 4 * 85.01 / 84.995 * 1000))) {
+    s2 <- s; s2$target_unit[1] <- u[1]; s2$target_value[1] <- as.numeric(u[2])
+    expect_equal(solve_mixture(s2, c("N", "P"), 72)$recipe, ref$recipe, tolerance = 1e-9)
+  }
+  # a free target: 20 mg P/L total from a WC-based intermediate at 10 mL/L
+  s3 <- s; s3$target_unit[2] <- "mgEl/L"; s3$target_value[2] <- 20
+  r <- solve_mixture(s3, "P", 100)
+  b <- 1.5 * 8.71; c_int <- 10 * 8.71; t <- 20 * 174.176 / 30.974
+  expect_equal(unname(r$fractions["P"]), (t - b) / (c_int - b), tolerance = 1e-9)
+  expect_equal(unname(r$final["P"]) * 30.974 / 174.176, 20, tolerance = 1e-9)
+})
+
+test_that("unit conversion round trip and old settings files", {
+  for (id in CHEM_IDS) for (u in union(TARGET_UNITS[[id]], STOCK_UNITS[[id]])) {
+    r <- s[s$id == id, ]
+    expect_equal(from_base(to_base(3.7, u, id, r), u, id, r), 3.7, tolerance = 1e-12)
+  }
+  old <- data.frame(id = CHEM_IDS, wc_baseline = c(1, 1.5, 0, 0, 0), stock_value = c(10, 10, 1000, 50, 0.5),
+                    stock_unit = c("mL/L", "mL/L", "mg/L", "mg/L", "g/L"), stock_solvent = c("WC", "WC", "water", "water", "water"),
+                    target_value = c(4, 4, 300, 300, 0.2), target_unit = c("x", "x", "mg/L", "\u00b5g/L", "mg/L"),
+                    stringsAsFactors = FALSE)
+  up <- upgrade_settings(old)
+  up$kind <- s$kind
+  expect_equal(prepare_settings(up)$target_base, prepare_settings(s)$target_base, tolerance = 1e-9)
 })
 
 test_that("design and media plan", {
